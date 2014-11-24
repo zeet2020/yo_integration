@@ -1,0 +1,175 @@
+<?
+
+module_load_include('inc','yo_integration','lib/yo');
+
+/* module  yo api message services implement  */
+
+
+
+function yo_integration_menu(){
+  $items = array();
+
+  $items['admin/config/content/yo_config'] = array(
+    'title' => 'Yo configaration',
+    'description' => 'Configurate page for setting the api key and couple of other options',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('yo_integration_config_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+
+
+/*
+*  system configuration page for setting apikey and content type to watch anf generate yo
+*/
+
+function yo_integration_config_form($form,&$form_state){
+   $form['yo_integration_apikey'] = array(
+     '#type' => 'textfield',
+     '#title' => t('Yo API KEY'),
+     '#default_value' => variable_get('yo_apikey'),
+     '#size' => 60,
+     '#maxlength' => 36,
+     '#minlength' => 36,
+     '#description' => t('Apikey generated from dashboard'),
+     '#required' => true
+     );
+
+
+   $form['yo_integration_content_type'] = array(
+     '#type' => 'checkboxes',
+     '#title' => t('select the content types'),
+     '#default_value' => variable_Get('yo_content_type'),
+     '#options' => _yo_integration_content_type_list(),
+     '#description' => t('select the content type on publish of which yo has to triggered')
+     );
+
+   return system_settings_form($form);
+
+}
+
+
+
+function _yo_integration_content_type_list(){
+    $list = node_type_get_types();
+
+    $options = array();
+
+    foreach($list as $key => $value){
+
+      $options[$key] = t($key);
+
+    }
+
+    return $options;
+}
+
+
+
+
+
+function _yo_integration_filtered(){
+   $list = array();
+   $types = variable_get('yo_content_type');
+   foreach($types as $key => $value){
+     if($value != '0'){
+       $list[] = $value;
+     }
+   }
+   return $list;
+}
+
+function _yo_integration_send_yo($link=NULL){
+  $yo_api = variable_get('yo_apikey');
+  $yo = new Yo($yo_api);
+  if(isset($link)){
+
+      try {
+           $yo->all($link);
+       } catch(Exception $e) {
+           $error_mesg = $e->getMessage();
+           watchdog("yo integration",$error_mesg,WATCH_ERROR,NULL);
+      }
+
+  } else {
+
+    try {
+         $yo->all();   // yo people
+     } catch(Exception $e) {
+       $error_mesg = $e->getMessage();
+
+         watchdog("yo integration",$error_mesg,WATCH_ERROR,NULL);    //some error handling
+    }
+
+  }
+
+
+}
+
+
+
+
+
+/**
+*  implementing of the hook_Aciton_info()
+**/
+
+
+function yo_integration_action_info(){
+
+  return array(
+    'yo_integration_yo_link' => array(
+        'type' => 'node',
+        'label' => t('Send Yo to subscribers with post link'),
+        'configurable' => FALSE,
+        'triggers' => array("node_update","node_insert"),
+      ),
+
+    'yo_integration_just_yo' => array(
+      'type' => 'system',
+      'label' => t('Yo the Subscribers'),
+      'configurable' => FALSE,
+      'tiggers' => array('any')
+
+    )
+
+  );
+
+}
+
+
+// implementing aciton methods
+
+function yo_integration_just_yo($context = array()){
+
+  _yo_integration_send_yo(NULL);
+
+}
+
+
+
+// implementing action methods
+function yo_integration_yo_link($context=array()){
+
+  if(empty($context)) return;
+
+   $node = $context;
+   $list_allowed = array();
+   $yo_content_types = _yo_integration_filtered();
+
+    if(in_array($node->type,$yo_content_types)){
+        $link = url(drupal_get_path_alias('node/' . $node->nid), array('absolute' => TRUE));
+        if(isset($node->original->status) && $node->original->status == 0 && $node->status == 1){
+            _yo_integration_send_yo($link); //send the yo if the content is revisioned
+        }
+
+        if(!isset($node->original->status) && $node->status == 1){
+            _yo_integration_send_yo($link);   //send the yo if the content is directly published
+        }
+    }
+
+}

@@ -1,0 +1,4 @@
+name = Yo integration
+description = module provide a integration with Yo api, sends a Yo to subscriber when a new content is published.
+core = 7.x
+ ;
